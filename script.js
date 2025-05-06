@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const compareContainer = document.getElementById('image-compare-modal-container');
     const compareTopClipper = document.getElementById('modal-compare-top-clipper');
     const compareSlider = document.getElementById('modal-compare-slider');
+    const faqItems = document.querySelectorAll('.faq-item'); // FAQ items (<details> elements)
 
     // --- Modal State ---
     let currentSlideIndex = 0;
@@ -118,25 +119,26 @@ document.addEventListener('DOMContentLoaded', () => {
         currentImages = [];
 
         // Determine Modal Type and Display Content
-        if (compareImg1 && compareImg2) {
+        if (compareImg1 && compareImg2) { // Priority 1: Comparison Slider
             const topImg = document.getElementById('modal-compare-top-image');
             const bottomImg = document.getElementById('modal-compare-bottom-image');
             currentCompareContainer.style.display = 'block';
             if(topImg) topImg.src = compareImg1; else console.error("compareTopImage element missing");
             if(bottomImg) bottomImg.src = compareImg2; else console.error("compareBottomImage element missing");
             initComparisonSlider_ORIGINAL();
-        } else if (serviceImage) {
-            currentModalServiceImage.src = serviceImage;
-            currentModalServiceImage.alt = title;
-            currentModalServiceImage.style.display = 'block';
-        } else if (images.length > 0) {
-            currentImages = images.map(img => img.trim()).filter(img => img);
+        } else if (images.length > 0) { // Priority 2: Slideshow (from data-images)
+            currentImages = images.map(img => img.trim()).filter(img => img); // Already filtered in handleItemClick, but good to be safe
             if (currentImages.length > 0) {
                 currentSlideIndex = 0;
                 currentModalSlideshow.style.display = 'block';
                 updateSlideshow();
             }
+        } else if (serviceImage) { // Priority 3: Single Service/Blog Image (from data-image or data-featured-image)
+            currentModalServiceImage.src = serviceImage;
+            currentModalServiceImage.alt = title;
+            currentModalServiceImage.style.display = 'block';
         }
+        // If none of the above, modal body will be just title and description
 
         // Show the modal
         modal.classList.add('active');
@@ -166,17 +168,22 @@ document.addEventListener('DOMContentLoaded', () => {
         elementThatOpenedModal = null;
     };
 
-    // --- Portfolio Slideshow Logic (Unchanged) ---
-    const updateSlideshow = () => { /* ... same as before ... */
+    // --- Portfolio Slideshow Logic ---
+    const updateSlideshow = () => {
         if (!modalSlideshowImage || !slideCounter || !slidePrevButton || !slideNextButton || currentImages.length === 0) return;
+
+        // Preload next and previous images for smoother transitions
         if (currentImages.length > 1) {
             const nextIndex = (currentSlideIndex + 1) % currentImages.length;
             const prevIndex = (currentSlideIndex - 1 + currentImages.length) % currentImages.length;
-            new Image().src = currentImages[nextIndex]; new Image().src = currentImages[prevIndex];
+            new Image().src = currentImages[nextIndex];
+            new Image().src = currentImages[prevIndex];
         }
+
         modalSlideshowImage.src = currentImages[currentSlideIndex];
         modalSlideshowImage.alt = `${modalTitle.textContent || 'Project'} - Image ${currentSlideIndex + 1}`;
         slideCounter.textContent = `${currentSlideIndex + 1} / ${currentImages.length}`;
+
         const showControls = currentImages.length > 1;
         slidePrevButton.style.display = showControls ? 'block' : 'none';
         slideNextButton.style.display = showControls ? 'block' : 'none';
@@ -318,19 +325,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const title = item.dataset.title || 'Details';
         let rawDescription = 'No description available.';
-        let serviceImage = null;
-        let imagesString = '';
+        let serviceImage = null; // For data-image or data-featured-image
+        let imagesString = '';   // For data-images (slideshow)
         let compareImg1 = null;
         let compareImg2 = null;
         let locationText = '';
 
+        // Extract data attributes based on item type
         if (type === 'blog') {
             rawDescription = item.dataset.fullContent || rawDescription;
-            serviceImage = item.dataset.featuredImage || null;
-        } else {
+            serviceImage = item.dataset.featuredImage || null; // Blog uses featuredImage for single display
+        } else { // Services and Portfolio
             rawDescription = item.dataset.description || rawDescription;
-            serviceImage = item.dataset.image || null;
+            // For services/portfolio: data-images for slideshow, data-image for single
             imagesString = item.dataset.images || '';
+            if (!imagesString) { // If no data-images, check for data-image (for single display)
+                serviceImage = item.dataset.image || null;
+            }
             compareImg1 = item.dataset.compareImg1 || null;
             compareImg2 = item.dataset.compareImg2 || null;
             locationText = item.dataset.location ? `<strong>Location:</strong> ${item.dataset.location}\\n\\n` : '';
@@ -339,6 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const images = imagesString ? imagesString.split(',').map(img => img.trim()).filter(img => img) : [];
 
         // Open the modal with extracted data
+        // The openModal function will prioritize comparison, then slideshow (images array), then single serviceImage
         openModal(title, locationText + rawDescription, images, serviceImage, compareImg1, compareImg2, event.currentTarget);
     };
 
@@ -372,7 +384,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             button.addEventListener('click', (e) => handleItemClick(parentArticle, 'blog', e));
             button.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { handleItemClick(parentArticle, 'blog', e); } });
-            // Button/Link already has appropriate role, just ensure focusability
             button.setAttribute('tabindex', '0');
         });
     } else { console.warn("No blog read more buttons found."); }
@@ -381,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Modal Closing & Slideshow Interaction Listeners ---
     if (modalCloseButton) modalCloseButton.addEventListener('click', closeModal);
     if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    document.addEventListener('keydown', (e) => { /* ... same as before ... */
+    document.addEventListener('keydown', (e) => {
         if (modal?.classList.contains('active')) {
             if (e.key === 'Escape') closeModal();
             if (modalSlideshow?.style.display !== 'none' && currentImages.length > 1) {
@@ -392,9 +403,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (slideNextButton) slideNextButton.addEventListener('click', showNextSlide);
     if (slidePrevButton) slidePrevButton.addEventListener('click', showPrevSlide);
+
     const handleTouchStart = (e) => { touchStartX = e.changedTouches[0].screenX; };
     const handleTouchEnd = (e) => { touchEndX = e.changedTouches[0].screenX; handleSwipeGesture(); };
-    const handleSwipeGesture = () => { /* ... same as before ... */
+    const handleSwipeGesture = () => {
         if (modalSlideshow?.style.display !== 'none' && currentImages.length > 1 && modal?.classList.contains('active')) {
             const swipeThreshold = 50;
             if (touchEndX < touchStartX - swipeThreshold) showNextSlide();
@@ -402,13 +414,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         touchStartX = 0; touchEndX = 0;
     };
-    if (modalSlideshow) { /* ... same as before ... */
+    if (modalSlideshow) {
         modalSlideshow.addEventListener('touchstart', handleTouchStart, { passive: true });
         modalSlideshow.addEventListener('touchend', handleTouchEnd, { passive: true });
     }
 
     // --- Contact Form Validation & Handling ---
-    if (form) { /* ... same as before ... */
+    if (form) {
         const requiredFields = form.querySelectorAll('[required]');
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -447,9 +459,39 @@ document.addEventListener('DOMContentLoaded', () => {
     function isValidEmail(email) { const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; return regex.test(email); }
 
     // --- Back to Top Button Smooth Scroll ---
-    if (backToTopButton) { /* ... same as before ... */
+    if (backToTopButton) {
         backToTopButton.addEventListener('click', (e) => {
             e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    // --- FAQ Accordion Logic (UPDATED) ---
+    if (faqItems.length > 0) {
+        faqItems.forEach(item => { // item is a <details> element
+            const summary = item.querySelector('summary.faq-question');
+            if (summary) {
+                summary.addEventListener('click', function(event) {
+                    // 'item' (the <details> element) is in the scope from the forEach loop.
+                    const clickedItem = item;
+
+                    // If the clicked item is currently closed (it's about to be opened by this click)
+                    // The 'open' attribute is not yet set by the browser at the point of 'click' event
+                    // on summary if it was previously closed. So we check its current state.
+                    // If it's closed, this click will open it.
+                    if (!clickedItem.open) {
+                        // Close all other FAQ items
+                        faqItems.forEach(otherItem => {
+                            if (otherItem !== clickedItem) {
+                                otherItem.removeAttribute('open');
+                            }
+                        });
+                    }
+                    // We don't need to manually set 'open' or 'removeAttribute('open')' on clickedItem here.
+                    // The default browser behavior for clicking a <summary> element will
+                    // toggle the 'open' attribute of its parent <details> element.
+                    // If we were to event.preventDefault(), then we would need to manage it.
+                });
+            }
         });
     }
 
